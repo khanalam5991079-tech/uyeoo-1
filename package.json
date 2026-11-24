@@ -1,19 +1,17 @@
 {
-  "name": "playback-error-test",
+  "name": "question1-playback-ab-diagnostic",
   "version": "1.0.0",
-  "description": "Test harness to find which feature causes playback error in the OBS + Puppeteer stream script",
-  "main": "playback_test.js",
+  "private": true,
+  "description": "Untouched Q1 baseline plus sequential one-variable-at-a-time 30s playback experiments",
   "scripts": {
-    "test": "node playback_test.js",
-    "start": "node playback_test.js"
+    "start": "node experiment-runner.js",
+    "check": "node --check question1-original.js && node --check experiment-runner.js",
+    "dry-run": "DRY_RUN=1 TARGET_URLS=https://example.com node experiment-runner.js"
   },
   "dependencies": {
-    "obs-websocket-js": "^5.0.6",
-    "puppeteer": "^22.15.0",
+    "puppeteer": "^23.11.1",
     "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2"
-  },
-  "engines": {
-    "node": ">=18"
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "obs-websocket-js": "^5.0.6"
   }
 }
