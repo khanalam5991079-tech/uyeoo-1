@@ -1,0 +1,19 @@
+{
+  "name": "playback-error-test",
+  "version": "1.0.0",
+  "description": "Test harness to find which feature causes playback error in the OBS + Puppeteer stream script",
+  "main": "playback_test.js",
+  "scripts": {
+    "test": "node playback_test.js",
+    "start": "node playback_test.js"
+  },
+  "dependencies": {
+    "obs-websocket-js": "^5.0.6",
+    "puppeteer": "^22.15.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
