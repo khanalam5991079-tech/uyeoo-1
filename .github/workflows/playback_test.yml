@@ -1,0 +1,85 @@
+name: Playback Error Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_url:
+        description: 'URL jahan playback error aata hai'
+        required: true
+        default: 'https://dadocric.st/player.php?id=starsp3&v=m'
+      only:
+        description: 'Sirf kuch tests (comma separated). Khali = sab. e.g. BASELINE,A_script_block'
+        required: false
+        default: ''
+      watch_sec:
+        description: 'Har test kitni der dekhe (seconds)'
+        required: false
+        default: '25'
+      proxy_engine:
+        description: 'Proxy'
+        required: false
+        default: 'Cloudflare WARP (Recommended)'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install system packages
+        run: |
+          sudo add-apt-repository -y ppa:obsproject/obs-studio
+          sudo apt-get update
+          sudo apt-get install -y xvfb obs-studio xdotool wmctrl pulseaudio ffmpeg
+          wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt-get install -y ./google-chrome-stable_current_amd64.deb
+
+      - name: Install node packages
+        run: npm install
+
+      - name: Setup Cloudflare WARP (SOCKS5 on 40000)
+        if: ${{ contains(inputs.proxy_engine, 'Cloudflare') }}
+        run: |
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update && sudo apt-get install -y cloudflare-warp
+          (sudo systemctl start warp-svc || (sudo nohup warp-svc >/dev/null 2>&1 &))
+          sleep 6
+          warp-cli --accept-tos registration new || warp-cli --accept-tos register
+          warp-cli --accept-tos mode proxy
+          warp-cli --accept-tos proxy port 40000 || true
+          warp-cli --accept-tos connect
+          sleep 6
+          curl -s --socks5-hostname 127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | head -n 8 || true
+
+      - name: Setup virtual audio
+        run: |
+          pulseaudio --start --exit-idle-time=-1 || true
+          pactl load-module module-null-sink sink_name=virtual_out || true
+          pactl set-default-sink virtual_out || true
+
+      - name: Run playback test
+        env:
+          TEST_URL: ${{ inputs.test_url }}
+          ONLY: ${{ inputs.only }}
+          WATCH_SEC: ${{ inputs.watch_sec }}
+          PROXY_ENGINE: ${{ inputs.proxy_engine }}
+          DISPLAY: ':99'
+        run: |
+          Xvfb :99 -screen 0 1280x720x24 &
+          sleep 3
+          node playback_test.js 2>&1 | tee test_log.txt
+
+      - name: Upload screenshots and log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playback-test-results
+          path: |
+            test_*.png
+            test_log.txt
