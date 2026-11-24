@@ -1,0 +1,106 @@
+name: Q1 Playback Error A-B Lab (One Chrome)
+run-name: Q1 playback diagnostic - ${{ inputs.test_mode }} - ${{ inputs.test_seconds }}s
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_urls:
+        description: 'ONE fully-qualified URL to test; use the same URL for every case'
+        type: string
+        required: true
+      okru_stream_channel:
+        description: 'Original Q1 OK.ru stream-channel ID, e.g. 1'
+        type: string
+        required: true
+        default: '1'
+      stream_quality:
+        description: 'Same output quality as your working Q1'
+        type: choice
+        options: ['360p', '480p', '720p', '1080p']
+        default: '720p'
+      proxy_engine:
+        description: 'Choose None unless a working proxy is configured at 127.0.0.1:40000'
+        type: choice
+        options: ['None', 'Cloudflare WARP (requires your running local SOCKS5 proxy)']
+        default: 'None'
+      enable_stream_audio:
+        type: choice
+        options: ['ON', 'OFF']
+        default: 'ON'
+      test_mode:
+        description: 'isolated = exact Q1 for EACH change; cumulative = one new change each round'
+        type: choice
+        options: ['isolated', 'cumulative']
+        default: 'isolated'
+      test_seconds:
+        description: 'Time spent observing each started Q1 page'
+        type: choice
+        options: ['30', '60', '120']
+        default: '30'
+      repeats:
+        description: 'Repeat the whole matrix to check reproducibility'
+        type: choice
+        options: ['1', '2', '3']
+        default: '1'
+      test_cases:
+        description: 'all or comma-separated IDs from the README'
+        type: string
+        default: 'all'
+        required: true
+
+jobs:
+  q1_ab_testing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      DISPLAY: ':99'
+      TARGET_URLS: ${{ inputs.target_urls }}
+      OKRU_STREAM_ID: ${{ inputs.okru_stream_channel }}
+      STREAM_QUALITY: ${{ inputs.stream_quality }}
+      PROXY_ENGINE: ${{ inputs.proxy_engine }}
+      ENABLE_STREAM_AUDIO: ${{ inputs.enable_stream_audio }}
+      TEST_MODE: ${{ inputs.test_mode }}
+      TEST_SECONDS: ${{ inputs.test_seconds }}
+      REPEATS: ${{ inputs.repeats }}
+      TEST_CASES: ${{ inputs.test_cases }}
+      CUSTOM_DURATION: '24/7'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install graphical browser/OBS dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            obs-studio xvfb openbox pulseaudio pulseaudio-utils \
+            xdotool wmctrl ffmpeg libnss3 libatk-bridge2.0-0 libasound2t64 \
+            libx11-xcb1 libgbm1 libgtk-3-0 libxss1 libxrandr2
+      - name: Install node dependencies and Chromium (Puppeteer browser)
+        run: |
+          npm install --no-audit --no-fund
+          npx puppeteer browsers install chrome
+          npm run check
+      - name: Launch X11 window manager and PulseAudio
+        run: |
+          Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset > /tmp/q1-xvfb.log 2>&1 &
+          sleep 2
+          openbox > /tmp/q1-openbox.log 2>&1 &
+          pulseaudio --start --exit-idle-time=-1 || true
+          pactl info || true
+      - name: Run exact Q1 baseline and every one-feature experiment
+        run: |
+          node experiment-runner.js
+      - name: Upload consolidated evidence and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: q1-playback-ab-evidence
+          path: |
+            reports/REPORT.md
+            reports/summary.csv
+            reports/summary.json
+            reports/*.log
+            reports/*.png
+          retention-days: 7
+          if-no-files-found: warn
